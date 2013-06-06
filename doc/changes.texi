@@ -654,6 +654,9 @@ colors, if possible
 @item
 @ghissue{144, Make the delay before starting a syntax check customizable
 via @code{flycheck-idle-change-delay}}
+@item
+@ghissue{143, Customizable syntax checker executables@comma{} via
+variables of the form @code{flycheck-@var{checker}-executable}}
 @end itemize
 
 @item

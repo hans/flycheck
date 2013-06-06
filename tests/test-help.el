@@ -66,17 +66,20 @@
                        (format "(flycheck-declare-checker %S" checker))))
           (kill-buffer))))))
 
-(ert-deftest flycheck-describe-checker-executable-name ()
-  "Test that the command name appears in syntax checker help."
+(ert-deftest flycheck-describe-checker-executable-var ()
+  "Test that the executable var appears in syntax checker help."
   (dolist (checker (flycheck-declared-checkers))
     (flycheck-with-help-buffer
       (flycheck-describe-checker checker)
       (with-current-buffer (help-buffer)
         (goto-char (point-min))
         (re-search-forward
-         "This\\s-+syntax\\s-+checker\\s-+executes\\s-+\"\\(.+?\\)\"\\(?:\\.\\|,\\)")
-        (should (string= (match-string 1)
-                         (flycheck-checker-executable checker)))))))
+         "This\\s-+syntax\\s-+checker\\s-+executes\\s-+\
+`\\(.+?\\)'\\s-+(default:\\s-+\"\\(.+?\\)\")\\(?:\\.\\|,\\)")
+        (let ((var  (flycheck-checker-executable-var checker))
+              (executable (flycheck-checker-command-executable checker)))
+          (should (string= (match-string 1) (symbol-name var)))
+          (should (string= (match-string 2) executable)))))))
 
 (ert-deftest flycheck-describe-checker-config-file-var ()
   "Test that the config file var appears in syntax checker help."
@@ -90,7 +93,7 @@
                                        (buffer-substring (point-min) (point-max))))
             (goto-char (point-min))
             (re-search-forward
-             ", using\\s-+a\\s-+configuration\\s-+file\\s-+from\\s-+`\\(.+?\\)'\\.")
+             ",\\s-+using\\s-+a\\s-+configuration\\s-+file\\s-+from\\s-+`\\(.+?\\)'\\.")
             (should (equal (match-string 1) (symbol-name config-file-var)))))))))
 
 (ert-deftest flycheck-describe-checker-option-vars ()

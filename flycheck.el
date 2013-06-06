@@ -87,6 +87,12 @@ buffer-local wherever it is set."
   :link '(custom-manual "(flycheck)Top")
   :link '(info-link "(flycheck)Usage"))
 
+(defgroup flycheck-executables nil
+  "Executables for on-the-fly syntax checkers."
+  :prefix "flycheck-"
+  :group 'flycheck
+  :link '(info-link "(flycheck)Configuration"))
+
 (defgroup flycheck-config-files nil
   "Configuration files for on-the-fly syntax checkers."
   :prefix "flycheck-"
@@ -1008,50 +1014,56 @@ registered (see `flycheck-registered-checker-p') is run.
 A checker must have a `:command' property, either
 `:error-patterns' or `:error-parser' (but not both), and at least
 one of `:predicate' and `:modes'.  If `:predicate' and `:modes'
-are present, both must match for the checker to be used."
+are present, both must match for the checker to be used.
+
+Also declare the customizable variable
+`flycheck-SYMBOL-executable' to override the executable of the
+new syntax checker."
   (declare (indent 1)
            (doc-string 2))
-  `(flycheck-set-checker-properties ',symbol
-     :command ,(plist-get properties :command)
-     :error-patterns ,(plist-get properties :error-patterns)
-     :error-parser (or ,(plist-get properties :error-parser)
-                       'flycheck-parse-with-patterns)
-     :modes ,(plist-get properties :modes)
-     :predicate ,(plist-get properties :predicate)
-     :next-checkers ,(plist-get properties :next-checkers)
-     :documentation ,docstring))
+  (let ((command (plist-get properties :command))
+        (executable-var (intern (format "flycheck-%s-executable"
+                                        (symbol-name symbol))))
+        (predicate (eval (plist-get properties :predicate))))
+    (unless (or (not predicate) (functionp predicate))
+       (message "Warning: Using an obsolete, non-function predicate for checker %s. \
+Use a function or lambda expression" symbol)
+       (setq predicate `(lambda () ,predicate)))
+    `(progn
+       (put ',symbol :flycheck-command ,command)
+       (put ',symbol :flycheck-executable-var ',executable-var)
+       (put ',symbol :flycheck-documentation ,docstring)
+       (put ',symbol :flycheck-error-patterns
+            ,(plist-get properties :error-patterns))
+       (put ',symbol :flycheck-error-parser
+            ,(or (plist-get properties :error-parser)
+                 ''flycheck-parse-with-patterns))
+       (put ',symbol :flycheck-modes ,(plist-get properties :modes))
+       (put ',symbol :flycheck-next-checkers
+            ,(plist-get properties :next-checkers))
+       (put ',symbol :flycheck-file
+            (-when-let (filename (if load-in-progress load-file-name
+                                   (buffer-file-name)))
+              (if (s-ends-with? ".elc" filename)
+                  (s-chop-suffix "c" filename)
+                filename)))
+       (put ',symbol :flycheck-predicate #',predicate)
+       (put ',symbol :flycheck-checker nil)
+       (flycheck-verify-checker ',symbol)
+       (put ',symbol :flycheck-checker t)
 
-(defun flycheck-clear-checker-properties (symbol)
-  "Remove all Flycheck checker properties from SYMBOL."
-  (--each '(checker command error-parser error-patterns modes predicate
-                    next-checkers documentation file)
-    (put symbol (intern (concat ":flycheck-" (symbol-name it))) nil)))
+       (defcustom ,executable-var nil
+         ,(format  "Executable of the `%s' syntax checker.
 
-(defun flycheck-set-checker-properties (symbol &rest properties)
-  "Set Flycheck checker PROPERTIES on SYMBOL."
-  (declare (indent 1))
-  (flycheck-clear-checker-properties symbol) ; Clear old properties first
-  (--each '(command error-parser error-patterns modes next-checkers
-                    documentation)
-    (let ((name (symbol-name it)))
-      (put symbol (intern (concat ":flycheck-" name))
-           (plist-get properties (intern (concat ":" name))))))
-  (-when-let (predicate (plist-get properties :predicate))
-    (unless (functionp predicate)
-      (message "Warning: Using an obsolete, non-function predicate for checker %s. \
-Use a function or lambda expression"
-               symbol)
-      (setq predicate #'(lambda () (eval predicate))))
-    (put symbol :flycheck-predicate predicate))
-  ;; Record the location of the definition of the checker.  If we're loading
-  ;; from a file, record the file loaded from.  Otherwise use the current
-  ;; buffer file name, in case of `eval-buffer' and the like.
-  (-when-let (filename (if load-in-progress load-file-name (buffer-file-name)))
-    (when (s-ends-with? ".elc" filename)
-      (setq filename (s-chop-suffix "c" filename)))
-    (put symbol :flycheck-file filename))
-  (flycheck-verify-checker symbol)
-  (put symbol :flycheck-checker t))
+The value of this variable is a string containing either a
+command name or a path.
+
+If nil, fall back to the default executable from the syntax
+checker declaration." symbol)
+         :type '(string :tag "Executable or path")
+         :group 'flycheck-executables
+         :risky t)
+       (make-variable-buffer-local ',executable-var))))
 
 ;;;###autoload
 (defmacro flycheck-def-config-file-var (symbol checker &optional file-name)
@@ -1245,12 +1257,40 @@ and hence still contains special tags and symbols.  Use
 command list with no special tags and symbols."
   (get checker :flycheck-command))
 
+(defun flycheck-checker-command-executable (checker)
+  "Get the executable from the CHECKER command.
+
+This function always returns the standard executable given in the
+declaration of the syntax checker.
+
+See `flycheck-checker-executable' to get the actual executable to
+run the syntax checker."
+  (car (flycheck-checker-command checker)))
+
+(defun flycheck-checker-command-arguments (checker)
+  "Get the raw arguments from the CHECKER command.
+
+This function returns the raw arguments given in the syntax
+checker declaration.
+
+See `flycheck-checker-substituted-command' to get an executable
+command."
+  (cdr (flycheck-checker-command checker)))
+
+(defun flycheck-checker-executable-var (checker)
+  "Get executable variable of CHECKER."
+  (get checker :flycheck-executable-var))
+
 (defun flycheck-checker-executable (checker)
   "Get the executable of CHECKER.
 
-The executable is the `car' of the checker command as returned by
-`flycheck-checker-command'."
-  (car (flycheck-checker-command checker)))
+The executable is either the value of
+`flycheck-CHECKER-executable', as returned by
+`flycheck-checker-executable-var'., or the executable from the
+syntax checker command, see
+`flycheck-checker-command-executable'."
+  (or (symbol-value (flycheck-checker-executable-var checker))
+      (flycheck-checker-command-executable checker)))
 
 (defun flycheck-checker-error-patterns (checker)
   "Get the error patterns of CHECKER."
@@ -1450,8 +1490,10 @@ In all other cases, signal an error."
 Substitute each argument in the command of CHECKER using
 `flycheck-substitute-argument'.  This replaces any special
 symbols in the command."
-  (-flatten (--keep (flycheck-substitute-argument it checker)
-                   (flycheck-checker-command checker))))
+
+  (cons (flycheck-checker-executable checker)
+        (-flatten (--keep (flycheck-substitute-argument it checker)
+                          (flycheck-checker-command-arguments checker)))))
 
 (defun flycheck-substitute-shell-argument (arg checker)
   "Substitute ARG for CHECKER.
@@ -1476,8 +1518,9 @@ Substitutions are performed like in
 
 Return the command of CHECKER as single string, suitable for
 shell execution."
-  (s-join " " (--keep (flycheck-substitute-shell-argument it checker)
-                      (flycheck-checker-command checker))))
+  (s-join " " (cons (shell-quote-argument (flycheck-checker-executable checker))
+                    (--keep (flycheck-substitute-shell-argument it checker)
+                            (flycheck-checker-command-arguments checker)))))
 
 
 ;;;; Configuration file functions
@@ -1682,7 +1725,8 @@ Pop up a help buffer with the documentation of CHECKER."
                      (called-interactively-p 'interactive))
     (save-excursion
       (with-help-window (help-buffer)
-        (let ((executable (flycheck-checker-executable checker))
+        (let ((executable (flycheck-checker-command-executable checker))
+              (executable-var (flycheck-checker-executable-var checker))
               (filename (flycheck-checker-file checker))
               (modes (flycheck-checker-modes checker))
               (config-file-var (flycheck-checker-config-file-var checker))
@@ -1696,7 +1740,8 @@ Pop up a help buffer with the documentation of CHECKER."
                 (re-search-backward "`\\([^`']+\\)'" nil t)
                 (help-xref-button 1 'help-flycheck-checker-def checker filename))))
           (princ ".\n\n")
-          (princ (format "  This syntax checker executes \"%s\"" executable))
+          (princ (format "  This syntax checker executes `%s' (default: \"%s\")"
+                         executable-var executable))
           (if config-file-var
               (princ (format ", using a configuration file from `%s'.\n"
                              config-file-var))

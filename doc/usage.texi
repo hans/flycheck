@@ -249,6 +249,8 @@ Show the documentation of a syntax checker.
 @comment  node-name,  next,  previous,  up
 @section Syntax checker configuration
 
+@subsection Syntax checker options
+
 Some syntax checkers can be configured via options.  The following
 options are provided by Flycheck (use @kbd{C-h v} or @kbd{M-x
 describe-variable} on the variable name for detailed help):
@@ -266,6 +268,8 @@ syntax checker allows without reporting an error.
 @defopt flycheck-phpcs-standard
 The coding standard the syntax checker @code{php-phpcs} shall use.
 @end defopt
+
+@subsection Syntax checker configuration files
 
 Some syntax checkers also read configuration files denoted by associated
 @dfn{configuration file variables}.  The following configuration files
@@ -346,6 +350,18 @@ directory.
 @end enumerate
 
 If any of these steps succeeds, the subsequent steps are not executed.
+
+@subsection Syntax checker executables
+
+All syntax checkers get their executables from variables named
+@code{flycheck-@var{checker}-executables}, where @var{checker} is
+substituted with the actual name of the syntax checker.
+
+Customize these variables using @kbd{M-x customize-group RET
+flycheck-executables}.
+
+Like configuration file variables, these variables are buffer local, and
+mostly intended to be used as file local variables.
 
 @node Reporting, Navigation, Configuration, Usage
 @comment  node-name,  next,  previous,  up
