@@ -540,15 +540,21 @@ buffer manually.
                                                         definition)))
     (with-temp-buffer
       (insert-file-contents source-file)
-      (aref (package-buffer-info) 3))))
+      (let ((pkg-info (package-buffer-info)))
+        (if (fboundp 'package-desc-version)
+            (package-version-join (package-desc-version pkg-info))
+          (aref (package-buffer-info) 3))))))
 
 (defun flycheck-package-version ()
   "Get the package version of Flycheck.
 
 This is the version number of the installed Flycheck package."
   (when (boundp 'package-alist)
-    (-when-let (info (cdr (assq 'flycheck package-alist)))
-      (package-version-join (aref info 0)))))
+    (-when-let* ((pkg-desc (cdr (assq 'flycheck package-alist)))
+                 (version (if (fboundp 'package-desc-version)
+                              (package-desc-version pkg-desc)
+                            (aref pkg-desc 0))))
+      (package-version-join version))))
 
 (defun flycheck-version (&optional show-version)
   "Get the Flycheck version as string.
