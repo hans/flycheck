@@ -700,6 +700,8 @@ interactive command}
 Correctly clean up information about running processes
 @item
 @ghissue{150, Fix compatibility with Emacs 24.2 and earlier}
+@item
+Fix compatibility with defstruct-based package.el
 @end itemize
 
 @end itemize
